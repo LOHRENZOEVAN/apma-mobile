@@ -1,0 +1,47 @@
+name: apma
+description: "A new Flutter project."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.5.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8 
+  firebase_core: ^3.1.0
+  firebase_auth: ^5.2.0 
+  cloud_firestore: ^5.4.0 
+  shared_preferences: ^2.3.2 
+  logger: ^2.4.0 
+  camera: ^0.11.0+2
+  permission_handler: ^11.3.1 
+  firebase_ml_model_downloader: ^0.3.1
+  image: ^3.0.1
+  google_sign_in: ^6.2.0
+  intl: ^0.19.0
+  tflite_flutter: ^0.11.0
+  image_picker: ^0.8.5+3  # for picking images from the gallery or camera
+  path_provider: ^2.0.8   # to handle file paths
+  
+
+dev_dependencies: 
+  flutter_test:
+    sdk: flutter 
+  flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.11.0
+
+flutter_launcher_icons: 
+  android: true
+  ios: true
+  image_path: "assets/icons/apma logo.png"
+  adaptive_icon_background: "#ffffff"
+  adaptive_icon_foreground: "assets/icons/apma logo.png"
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/logo apma.png 
+    - assets/icons/apma logo.png 
+    - assets/models/best_float32.tflite

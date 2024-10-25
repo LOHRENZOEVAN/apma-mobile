@@ -1,0 +1,9 @@
+Cattle
+Chicken 
+Goat
+Goose
+Horse
+Ostrich
+Pig
+Sheep
+human
