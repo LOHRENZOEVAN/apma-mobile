@@ -24,7 +24,7 @@ dependencies:
   tflite_flutter: ^0.11.0
   image_picker: ^0.8.5+3  # for picking images from the gallery or camera
   path_provider: ^2.0.8   # to handle file paths
-  
+
 
 dev_dependencies: 
   flutter_test:

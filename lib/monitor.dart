@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -22,17 +23,20 @@ class MonitorPage extends StatefulWidget {
 
 class _MonitorPageState extends State<MonitorPage> {
   final logger = Logger();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   Interpreter? _interpreter;
   List<Map<String, dynamic>>? _results;
   final ImagePicker _picker = ImagePicker();
   File? _image;
   bool _isModelLoading = false;
   bool _isProcessing = false;
+  final List<AnimalRecord> _animalRecords = [];
 
   @override
   void initState() {
     super.initState();
     _loadModel();
+    _fetchReportsFromFirestore();
   }
 
   Future<void> _loadModel() async {
@@ -77,7 +81,6 @@ class _MonitorPageState extends State<MonitorPage> {
     final image = img.decodeImage(imageBytes);
     if (image == null) throw Exception('Failed to decode image');
 
-    // Resize image to 640x640
     final resizedImage = img.copyResize(
       image,
       width: 640,
@@ -85,7 +88,6 @@ class _MonitorPageState extends State<MonitorPage> {
       interpolation: img.Interpolation.linear,
     );
 
-    // Initialize input tensor with shape [1, 640, 640, 3]
     var inputArray = List.generate(
       1,
       (b) => List.generate(
@@ -97,7 +99,6 @@ class _MonitorPageState extends State<MonitorPage> {
       ),
     );
 
-    // Convert image to normalized float values
     for (var y = 0; y < resizedImage.height; y++) {
       for (var x = 0; x < resizedImage.width; x++) {
         final pixel = resizedImage.getPixel(x, y);
@@ -121,10 +122,8 @@ class _MonitorPageState extends State<MonitorPage> {
     });
 
     try {
-      // Preprocess image
       final input = await _preprocessImage(_image!);
-      
-      // Prepare output tensor with correct shape [1, 13, 8400]
+
       var outputShape = [1, 13, 8400];
       var outputs = List.generate(
         outputShape[0],
@@ -133,15 +132,12 @@ class _MonitorPageState extends State<MonitorPage> {
           (j) => List<double>.filled(outputShape[2], 0),
         ),
       );
-      
-      // Run inference
+
       _interpreter!.run(input, outputs);
 
-      // Process results
       final imageInput = img.decodeImage(await _image!.readAsBytes());
       if (imageInput == null) throw Exception('Failed to decode image');
 
-      // Transpose the output to match YOLOv8 format [8400, 13]
       var transposedOutputs = List.generate(
         8400,
         (i) => List.generate(
@@ -182,7 +178,6 @@ class _MonitorPageState extends State<MonitorPage> {
       var maxScore = 0.0;
       var maxScoreIndex = 0;
 
-      // Find class with highest confidence (starting from index 4)
       for (var j = 4; j < output.length; j++) {
         if (output[j] > maxScore) {
           maxScore = output[j];
@@ -191,25 +186,54 @@ class _MonitorPageState extends State<MonitorPage> {
       }
 
       if (maxScore > confidenceThreshold) {
-        // Extract bounding box coordinates
         double x = output[0];
         double y = output[1];
         double w = output[2];
         double h = output[3];
 
-        // Convert to corner coordinates and scale to original image size
         double x1 = (x - w/2) * originalWidth;
         double y1 = (y - h/2) * originalHeight;
         double x2 = (x + w/2) * originalWidth;
         double y2 = (y + h/2) * originalHeight;
 
-        // Ensure coordinates are within image bounds
         x1 = x1.clamp(0.0, originalWidth.toDouble());
         y1 = y1.clamp(0.0, originalHeight.toDouble());
         x2 = x2.clamp(0.0, originalWidth.toDouble());
         y2 = y2.clamp(0.0, originalHeight.toDouble());
 
+        final species = YOLO_CLASSES[maxScoreIndex];
+        final id = AnimalTrackingService.generateAnimalId(species);
+        final healthStatus = AnimalTrackingService.assessHealth({
+          'species': species,
+          'confidence': maxScore,
+          'box': {
+            'x1': x1,
+            'y1': y1,
+            'x2': x2,
+            'y2': y2,
+          },
+        });
+
+        final record = AnimalRecord(
+          id: id,
+          species: species,
+          detectedAt: DateTime.now(),
+          confidence: maxScore,
+          healthStatus: healthStatus,
+          notes: '',
+          boundingBox: {
+            'x1': x1,
+            'y1': y1,
+            'x2': x2,
+            'y2': y2,
+          },
+        );
+
+        _animalRecords.add(record);
+        _saveReportToFirestore(record);  // Save report to Firestore
+
         detections.add({
+          'id': id,
           'box': {
             'x1': x1,
             'y1': y1,
@@ -218,12 +242,39 @@ class _MonitorPageState extends State<MonitorPage> {
           },
           'confidence': maxScore,
           'class': maxScoreIndex,
-          'class_name': YOLO_CLASSES[maxScoreIndex],
+          'class_name': species,
+          'health_status': healthStatus,
         });
       }
     }
 
     return _applyNMS(detections, nmsThreshold);
+  }
+
+  Future<void> _saveReportToFirestore(AnimalRecord record) async {
+    try {
+      await _firestore.collection('animalReports').add(record.toMap());
+      logger.i("Report saved to Firestore");
+    } catch (e) {
+      logger.e("Failed to save report: $e");
+      _showError("Failed to save report: ${e.toString()}");
+    }
+  }
+
+  Future<void> _fetchReportsFromFirestore() async {
+    try {
+      final querySnapshot = await _firestore.collection('animalReports').get();
+      final reports = querySnapshot.docs.map((doc) {
+        return AnimalRecord.fromMap(doc.data() as Map<String, dynamic>);
+      }).toList();
+
+      setState(() {
+        _animalRecords.addAll(reports);
+      });
+    } catch (e) {
+      logger.e("Failed to fetch reports: $e");
+      _showError("Failed to fetch reports: ${e.toString()}");
+    }
   }
 
   List<Map<String, dynamic>> _applyNMS(
@@ -272,8 +323,6 @@ class _MonitorPageState extends State<MonitorPage> {
 
     return intersection / union;
   }
-
-
 
   Future<void> _pickImage(ImageSource source) async {
     try {
@@ -362,7 +411,7 @@ class _MonitorPageState extends State<MonitorPage> {
                     ),
                     title: Text(detection['class_name']),
                     subtitle: Text(
-                      'Confidence: ${(detection['confidence'] * 100).toStringAsFixed(1)}%'
+                      'Confidence: ${(detection['confidence'] * 100).toStringAsFixed(1)}%\nHealth: ${detection['health_status']}',
                     ),
                   );
                 },
@@ -469,4 +518,60 @@ class BoundingBoxPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;}
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+class AnimalRecord {
+  final String id;
+  final String species;
+  final DateTime detectedAt;
+  final double confidence;
+  final String healthStatus;
+  final String notes;
+  final Map<String, double> boundingBox;
+
+  AnimalRecord({
+    required this.id,
+    required this.species,
+    required this.detectedAt,
+    required this.confidence,
+    required this.healthStatus,
+    required this.notes,
+    required this.boundingBox,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'species': species,
+      'detectedAt': detectedAt.toIso8601String(),
+      'confidence': confidence,
+      'healthStatus': healthStatus,
+      'notes': notes,
+      'boundingBox': boundingBox,
+    };
+  }
+
+  factory AnimalRecord.fromMap(Map<String, dynamic> map) {
+    return AnimalRecord(
+      id: map['id'] ?? 'unknown',
+      species: map['species'] ?? 'unknown species',
+      detectedAt: DateTime.tryParse(map['detectedAt'] ?? '') ?? DateTime.now(),
+      confidence: (map['confidence'] as num?)?.toDouble() ?? 0.0,
+      healthStatus: map['healthStatus'] ?? 'unknown',
+      notes: map['notes'] ?? '',
+      boundingBox: Map<String, double>.from(map['boundingBox'] ?? {}),
+    );
+  }
+}
+
+class AnimalTrackingService {
+  static String generateAnimalId(String species) {
+    return '${species}_${DateTime.now().millisecondsSinceEpoch}';
+  }
+
+  static String assessHealth(Map<String, dynamic> detectionData) {
+    final confidence = detectionData['confidence'];
+    return confidence > 0.6 ? 'Healthy' : 'At risk';
+  }
+}

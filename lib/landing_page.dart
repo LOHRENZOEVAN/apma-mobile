@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // For session management
 import 'monitor.dart'; // Import the monitor page
 import 'engage.dart'; // Import the engage page
+import 'reports.dart'; // Import the reports page
 import 'dart:async'; // For timing session expiration
 
 class LandingPage extends StatefulWidget {
@@ -82,7 +83,10 @@ class _LandingPageState extends State<LandingPage> {
                         ),
                         InkWell(
                           onTap: () {
-                            // Add a Reports page navigation if needed
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const Reports(records: [],)),
+                            );
                           },
                           child: Card(
                             color: const Color.fromARGB(255, 148, 240, 186),
