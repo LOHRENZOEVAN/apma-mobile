@@ -8,9 +8,9 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyBPFWYJ23Kep5vOHTOhrCq4vxEYcZzfG2c',
-    appId: '417291351512',
-    messagingSenderId: '417291351512-8o6b7bcc9ltl0an0qtjqaqunv17qecb2.apps.googleusercontent.com',
+    apiKey: '##########################',
+    appId: '########',
+    messagingSenderId: '##############################################',
     projectId: 'apma-flutter',
   );
 }

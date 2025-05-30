@@ -95,7 +95,6 @@ class _ReportsState extends State<Reports> {
     String notes = record.notes;
     String? healthStatus = record.healthStatus;
 
-    // Ensure healthStatus has a valid initial value
     if (!['Healthy', 'Needs Attention', 'Critical'].contains(healthStatus)) {
       healthStatus = 'Healthy';
     }
@@ -149,13 +148,32 @@ class _ReportsState extends State<Reports> {
 
   Future<void> _updateRecord(String id, String healthStatus, String notes) async {
     try {
-      await _firestore.collection('animalReports').doc(id).update({
+      // Check if the document exists before attempting an update
+      final docRef = _firestore.collection('animalReports').doc(id);
+      final docSnapshot = await docRef.get();
+
+      if (!docSnapshot.exists) {
+        throw Exception("Document with ID $id does not exist in Firestore.");
+      }
+
+      // Proceed with the update if document exists
+      await docRef.update({
         'healthStatus': healthStatus,
         'notes': notes,
       });
       print("Record updated successfully");
+
+      // Provide user feedback on success
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Record updated successfully'),
+          backgroundColor: Colors.green,
+        ),
+      );
     } catch (e) {
       print("Failed to update record: $e");
+
+      // Provide user feedback on failure
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to update record: $e'),
